@@ -9,7 +9,6 @@ on:
       - "gradle.properties"
       - "src/**"
       - "source/**"
-      - ".github/workflows/build.yml"
   workflow_dispatch:
 
 permissions:
