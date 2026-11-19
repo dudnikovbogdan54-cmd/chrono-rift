@@ -2,35 +2,69 @@ name: Build Chrono Rift
 
 on:
   push:
+    branches: [main]
     paths:
-      - "source/chrono-rift-2.1.0-source.zip"
+      - "build.gradle"
+      - "settings.gradle"
+      - "gradle.properties"
+      - "src/**"
+      - "source/**"
+      - ".github/workflows/build.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: chrono-rift-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Checkout source
+        uses: actions/checkout@v5
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
-      - uses: gradle/actions/setup-gradle@v4
+          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.2.1"
-      - name: Extract project
+
+      - name: Locate project
+        id: project
+        shell: bash
         run: |
-          mkdir -p work
-          unzip source/chrono-rift-2.1.0-source.zip -d work
+          if [[ -f build.gradle || -f build.gradle.kts ]]; then
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          elif [[ -f source/chrono-rift-2.1.0-source.zip ]]; then
+            mkdir -p work
+            unzip -q source/chrono-rift-2.1.0-source.zip -d work
+            if [[ -f work/build.gradle || -f work/build.gradle.kts ]]; then
+              echo "dir=work" >> "$GITHUB_OUTPUT"
+            else
+              echo "::error::Archive extracted, but build.gradle was not found at its root."
+              exit 1
+            fi
+          else
+            echo "::error::Chrono Rift source is missing. Commit build.gradle and src/ to the repository root, or add source/chrono-rift-2.1.0-source.zip."
+            exit 1
+          fi
+
       - name: Build mod
-        working-directory: work
+        working-directory: ${{ steps.project.outputs.dir }}
         run: gradle build --no-daemon
-      - name: Upload JAR
+
+      - name: Upload mod JAR
         uses: actions/upload-artifact@v4
         with:
           name: chrono-rift-2.1.0
-          path: work/build/libs/*.jar
+          path: ${{ steps.project.outputs.dir }}/build/libs/*.jar
           if-no-files-found: error
